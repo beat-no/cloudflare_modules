@@ -1,2 +1,4 @@
 args/
 venv/
+__pycache__/
+*.pyc
