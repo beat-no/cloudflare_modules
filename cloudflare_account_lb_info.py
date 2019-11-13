@@ -29,10 +29,10 @@ from ansible.module_utils.basic import AnsibleModule
 
 DOCUMENTATION = '''
 ---
-module: cloudflare_account_lb
-short_description: Gather information about Cloudflare load balancers
+module: cloudflare_account_lb_info
+short_description: Gather information about Cloudflare load balancer pools
 description:
-  - Gather information about Cloudflare load balancers
+  - Gather information about a Cloudflare load balancer pool
 author: Beat beat.no
 options:
   account_id:
@@ -51,7 +51,7 @@ options:
 '''
 
 EXAMPLES = '''
-- cloudflare_account_lb: >
+- cloudflare_account_lb_info: >
     account_id=321423423gfd239sfda9afd0123e20
     email=joe@example.com
     api_key=77a54a4c36858cfc10321fcfce22378e19e20
@@ -115,7 +115,6 @@ class Cloudflare(object):
         self.email = email
         self.api_key = api_key
 
-    # Supported methods are GET and PUT
     def request(self, method, **kwargs):
         # remove unset
         kwargs = dict((k, v) for k, v in kwargs.iteritems() if v)
@@ -130,7 +129,6 @@ class Cloudflare(object):
         request.add_header('X-Auth-Email', self.email)
         request.add_header('X-Auth-Key', self.api_key)
 
-        # Overload the get method
         request.get_method = lambda: method
         connection = opener.open(request)
         response_json = json.loads(connection.read())
