@@ -148,9 +148,9 @@ def cloudflare_account_lb(module):
 def main():
     module = AnsibleModule(
         argument_spec=dict(
-            account_id=dict(required=True),
-            email=dict(no_log=False, default=os.environ.get('CLOUDFLARE_API_EMAIL')),
-            api_key=dict(no_log=False, default=os.environ.get('CLOUDFLARE_API_TOKEN')),
+            account_id=dict(no_log=True, required=True),
+            email=dict(default=os.environ.get('CLOUDFLARE_API_EMAIL')),
+            api_key=dict(no_log=True, default=os.environ.get('CLOUDFLARE_API_TOKEN')),
         ),
         supports_check_mode=False,
     )
