@@ -23,6 +23,7 @@
 import json
 import urllib2
 import os
+import itertools
 
 from ansible.module_utils.basic import AnsibleModule
 
@@ -83,46 +84,33 @@ EXAMPLES = '''
 
 
 RETURN = '''
-clbs:
-    [{
-      "check_regions": [
-        "ABCD"
-      ],
-      "description": "",
-      "origins": [
-        {
-          "enabled": true,
-          "name": "example_server3",
-          "weight": 1,
-          "address": "0.0.0.0"
-        },
-        {
-          "enabled": true,
-          "name": "example_server2",
-          "weight": 1,
-          "address": "0.0.0.0"
-        },
-        {
-          "enabled": true,
-          "name": "example_server1",
-          "weight": 1,
-          "address": "0.0.0.0"
-        },
-        {
-          "enabled": true,
-          "name": "example_server0",
-          "weight": 1,
-          "address": "0.0.0.0"
-        }
-      ],
-      "enabled": true,
-      "created_on": "1814-05-17T09:46:07.281116Z",
-      "minimum_origins": 1,
-      "modified_on": "1814-05-17T09:46:07.281116Z",
-      "notification_email": "email@notification.com",
-      "id": "fdsao99fdas9fdsaklkfdsa9fdas",
-      "name": "lb_name"
-    }]
+  "changed": true,
+   "origins": [
+     {
+       "enabled": true,
+       "name": "example_server3",
+       "weight": 1,
+       "address": "0.0.0.0"
+     },
+     {
+       "enabled": true,
+       "name": "example_server2",
+       "weight": 1,
+       "address": "0.0.0.0"
+     },
+     {
+       "enabled": true,
+       "name": "example_server1",
+       "weight": 1,
+       "address": "0.0.0.0"
+     },
+     {
+       "enabled": true,
+       "name": "example_server0",
+       "weight": 1,
+       "address": "0.0.0.0"
+     }
+   ]
 '''
 
 class CloudflareException(Exception):
@@ -142,7 +130,7 @@ class Cloudflare(object):
         self.instance_name = instance_name
         self.instance_weight = instance_weight
         self.wait = wait
-
+        self.changed = False
 
     def request(self, content, **kwargs):
         # remove unset
@@ -176,10 +164,6 @@ class Cloudflare(object):
         current_pool_name = current_state.get('name')
         origins = current_state.get('origins')
 
-        # new origin does not exist in current origin?
-        if self._get_origin_by_ip(origins) is not None:
-            raise CloudflareException('Origin requested to be present already exists')
-
         # new origin to be added
         new_origin = {
 		    "enabled": True,
@@ -188,13 +172,17 @@ class Cloudflare(object):
             "address": self.instance_ip,
 	    }
 
-        origins.append(new_origin)
+        # Remove existing origin from list if exists
+        desired_origins_state = list(filter(lambda i: i['address'] != self.instance_ip, origins))
+        desired_origins_state.append(new_origin)
 
         # create minimal object that cloudflare api will accept
         desired_state = json.dumps({
             "name": current_pool_name,
-            "origins": origins,
+            "origins": desired_origins_state,
         })
+
+        self.changed = not self._dict_lists_match(origins, desired_origins_state)
         return self.request(a='req_present', content=desired_state)
 
 
@@ -212,7 +200,14 @@ class Cloudflare(object):
             "name": current_pool_name,
             "origins": desired_origins_state
         })
+
+        self.changed = not self._dict_lists_match(origins, desired_origins_state)
         return self.request(a='req_absent', content=desired_state)
+
+    def _dict_lists_match(self, xs, ys):
+        intersec = [item for item in xs if item in ys]
+        sym_diff = [item for item in itertools.chain(xs, ys) if item not in intersec]
+        return len(sym_diff) == 0
 
     def _req_pool_info(self):
         """
@@ -263,11 +258,11 @@ def cloudflare_account_instance(module):
 
     if state == 'present':
         resp = cloudflare.req_present()
-        module.exit_json(changed=True, response=resp)
+        module.exit_json(changed=cloudflare.changed, origins=resp['result']['origins'])
 
     elif state == 'absent':
         resp = cloudflare.req_absent()
-        module.exit_json(changed=True, response=resp)
+        module.exit_json(changed=cloudflare.changed, origins=resp['result']['origins'])
 
     module.fail_json(msg='Unknown value "{0}" for argument state. Expected one of: present, absent.')
 
@@ -275,9 +270,9 @@ def main():
     module = AnsibleModule(
         argument_spec=dict(
             account_id=dict(required=True),
-            pool_id=dict(required=True),
-            email=dict(no_log=False, default=os.environ.get('CLOUDFLARE_API_EMAIL')),
-            api_key=dict(no_log=False, default=os.environ.get('CLOUDFLARE_API_TOKEN')),
+            pool_id=dict(no_log=True, required=True),
+            email=dict(default=os.environ.get('CLOUDFLARE_API_EMAIL')),
+            api_key=dict(no_log=True, default=os.environ.get('CLOUDFLARE_API_TOKEN')),
             state=dict(required=True, choices=['present', 'absent']),
             instance_ip=dict(required=True),
             instance_name=dict(required=True),
